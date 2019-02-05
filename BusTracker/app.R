@@ -1,11 +1,5 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
+# App Name: PAAC Tracker
+# Author: Geoffrey Arnold
 
 library(shiny)
 require(curl)
@@ -31,10 +25,12 @@ getRealTime <- function(endpoint, params, response) {
 routes <- getRealTime("getroutes", response = "routes")
 
 # Define UI for application that draws map
-ui <- fluidPage( style = "padding: 0;",
-    leafletOutput("map"),
-    tags$style(type = "text/css", 
-               "#map {height: calc(100vh) !important;}")
+ui <- fluidPage(style = "padding: 0;", 
+                tags$head(tags$title("Port Authority Bus Tracker")),
+                tags$head(tags$link(rel = "shortcut icon", href="favicon-bus.ico")),
+                leafletOutput("map"),
+                tags$style(type = "text/css",
+                           "#map {height: calc(100vh) !important;}")
 )
 
 # Define server logic
