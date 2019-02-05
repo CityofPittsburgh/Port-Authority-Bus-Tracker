@@ -26,7 +26,7 @@ routes <- getRealTime("getroutes", response = "routes")
 
 # Define UI for application that draws map
 ui <- fluidPage(style = "padding: 0;", 
-                tags$head(tags$title("Port Authority Bus Tracker")),
+                tags$head(tags$title("Port Authority Bus Tracker", NULL)),
                 tags$head(tags$link(rel = "shortcut icon", href="favicon-bus.ico")),
                 leafletOutput("map"),
                 tags$style(type = "text/css",
