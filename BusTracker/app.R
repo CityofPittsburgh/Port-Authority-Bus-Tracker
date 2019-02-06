@@ -6,6 +6,7 @@ require(curl)
 library(leaflet)
 require(jsonlite)
 require(dplyr)
+require(shinyjs)
 
 key <- fromJSON("key.json")$key
 
@@ -22,57 +23,134 @@ getRealTime <- function(endpoint, params, response) {
 }
 
 # Routes
-routes <- getRealTime("getroutes", response = "routes")
+load.routes <- getRealTime("getroutes", response = "routes")
 
 # Define UI for application that draws map
 ui <- fluidPage(style = "padding: 0;", 
                 tags$head(tags$title("Port Authority Bus Tracker", NULL)),
                 tags$head(tags$link(rel = "shortcut icon", href="favicon-bus.ico")),
-                leafletOutput("map"),
-                tags$style(type = "text/css",
-                           "#map {height: calc(100vh) !important;}")
+                useShinyjs(),
+                absolutePanel(top = 10, right = 20, id = "expand", style = "display: none; z-index: 1000; padding: 0;",
+                              actionButton("filters", "", icon = icon("search"))),
+                column(2, style = "padding: 0;",
+                       wellPanel(id = "panel", style = "z-index: 1; overflow-y: scroll; height: calc(100vh); margin-bottom: 0;",
+                           selectInput("basemapSelect",
+                                             label = "Basemap",
+                                             choices = c(`OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", Google = "googleStreets", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter"),
+                                             selected = "OpenStreetMap.Mapnik"),
+                                 actionButton("routeRefresh", "Deselect All", icon = icon("check-square-o")),
+                                 tags$br(), tags$br(),
+                                 checkboxGroupInput("routeSelect",
+                                                    "Show Routes:",
+                                                    choices = sort(load.routes$rt),
+                                                    selected = sort(load.routes$rt))
+                       )
+                   ),
+               column(10, style = "padding: 0;",
+                      leafletOutput("map")
+                       ),
+               tags$style(type = "text/css",
+                          "#map {height: calc(100vh) !important;}
+                          @media screen and (max-width: 600px) {
+                            #panel {display: none;}
+                            #expand {display: initial !important;}
+                          }")
 )
 
 # Define server logic
-server <- function(input, output) {
-    # Refresh every 10 seconds
-    autoRefresh <- reactiveTimer(10000)
+server <- function(input, output, session) {
+    # Refresh every 5 seconds
+    autoRefresh <- reactiveTimer(5000)
     # Map
     output$map <- renderLeaflet({
         leaflet() %>%
-            addTiles(group = "Mapnik") %>%
-            addProviderTiles("OpenStreetMap.BlackAndWhite", group = "Black & White") %>%
-            addProviderTiles("OpenStreetMap.HOT", group = "Humanitarian") %>%
-            addTiles(urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", attribution = "Google", group = "Google") %>%
-            addProviderTiles("Esri.WorldImagery", group = "Satellite") %>%
             setView(-79.9959, 40.4406, zoom = 12) %>% 
             addEasyButton(easyButton(
                 icon="fa-crosshairs", title="Locate Me",
-                onClick=JS("function(btn, map){ map.locate({setView: true}); }"))) %>%
-            addLayersControl(baseGroups = c("Mapnik", "Black & White", "Humanitarian", "Google", "Satellite"),
-                             overlayGroups = routes$rt)
+                onClick=JS("function(btn, map){ map.locate({setView: true}); }")))
     })
+    # Filter Show
+    observe({
+        if ((input$filters %% 2) != 0) {
+            hide("panel")
+        } else {
+            show("panel")
+        }
+    })
+    # Route Selection
+    routesInput <- reactive({
+        routes <- subset(load.routes, rt %in% input$routeSelect)
+    })
+    # Change Basemap
+    observe({
+        # Basemaps
+        if (input$basemapSelect == "googleStreets") {
+            leafletProxy("map", session = session) %>%
+                clearTiles() %>% 
+                addTiles(urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", attribution = "Google")
+        } else {
+            leafletProxy("map", session = session) %>%
+                clearTiles() %>%
+                addProviderTiles(input$basemapSelect, options = providerTileOptions(noWrap = TRUE))
+        }
+    })
+    observeEvent(input$routeRefresh, {
+        if ((input$routeRefresh %% 2) != 0) {
+            updateCheckboxGroupInput(session,
+                                     "routeSelect",
+                                     selected = "")
+            updateActionButton(session,
+                               "routeRefresh",
+                               label = "Select All",
+                               icon = icon("check-square"))
+        } else {
+            updateCheckboxGroupInput(session,
+                                     "routeSelect",
+                                     selected = sort(load.routes$rt))
+            updateActionButton(session,
+                               "routeRefresh",
+                               label = "Deselect All",
+                               icon = icon("check-square-o"))
+        }
+    })
+    # Refresh Bus locations
     observe({
         autoRefresh()
-        for (i in seq(from = 1, to = nrow(routes), by = 10)) {
-            j <- i + 9
-            if (i == 1) {
-                vehicles <- getRealTime("getvehicles", list(rt = paste(routes$rt[i:j], collapse =",")), "vehicle")
-            } else {
-                vehicles <- rbind(vehicles, getRealTime("getvehicles", list(rt = paste(routes$rt[i:j], collapse =",")), "vehicle"))
+        routes <- routesInput()
+        if (nrow(routes) > 0) {
+            # Get selected Route Buses
+            for (i in seq(from = 1, to = nrow(routes), by = 10)) {
+                j <- i + 9
+                if (i == 1) {
+                    vehicles <- getRealTime("getvehicles", list(rt = paste(routes$rt[i:j], collapse =",")), "vehicle")
+                } else {
+                    vehicles <- rbind(vehicles, getRealTime("getvehicles", list(rt = paste(routes$rt[i:j], collapse =",")), "vehicle"))
+                }
             }
-        }
-        
-        vehicles <- vehicles %>%
-            mutate(lat = as.numeric(lat),
-                   lon = as.numeric(lon)) %>%
-            left_join(routes, by = "rt")
-        
-        for (route in routes$rt) {
-            temp <- subset(vehicles, rt == route)
-            leafletProxy("map") %>%
-                clearGroup(route) %>%
-                addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, label = ~paste(rt, "-", des), group = route, icon = awesomeIcons(markerColor =  "gray", text = ~rt, iconColor = ~rtclr))
+            # Merge buses to route colors
+            vehicles <- vehicles %>%
+                mutate(lat = as.numeric(lat),
+                       lon = as.numeric(lon)) %>%
+                left_join(routes, by = "rt")
+            # Clear all deselected Routes
+            deRoute <- subset(load.routes, !(rt %in% routes$rt))
+            for (route in deRoute$rt) {
+                leafletProxy("map") %>%
+                    clearGroup(route)
+            }
+            # Add Selected Routes
+            for (route in routes$rt) {
+                temp <- subset(vehicles, rt == route)
+                leafletProxy("map") %>%
+                    clearGroup(route) %>%
+                    addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, label = ~paste(rt, "-", des), group = route, icon = awesomeIcons(markerColor =  "gray", text = ~rt, iconColor = ~rtclr))
+            }
+        } else {
+            # Clear all routes
+            for (route in load.routes$rt) {
+                leafletProxy("map") %>%
+                    clearGroup(route)
+            }
         }
     })
 }
