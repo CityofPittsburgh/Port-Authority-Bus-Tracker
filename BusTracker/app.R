@@ -31,7 +31,7 @@ ui <- fluidPage(style = "padding: 0;",
                 tags$head(tags$link(rel = "shortcut icon", href="favicon-bus.ico")),
                 useShinyjs(),
                 absolutePanel(top = 10, right = 20, id = "expand", style = "display: none; z-index: 1000; padding: 0;",
-                              actionButton("filters", "", icon = icon("search"))),
+                              actionButton("filters", "", icon = icon("map"))),
                 # Column for the Filters
                 column(2, style = "padding: 0;",
                        wellPanel(id = "panel", style = "z-index: 1; overflow-y: scroll; height: calc(100vh); margin-bottom: 0;",
@@ -76,8 +76,14 @@ server <- function(input, output, session) {
     observe({
         # Has Filter button been selected?
         if ((input$filters %% 2) != 0) {
+            updateActionButton(session,
+                               "filters",
+                               icon = icon("search"))
             hide("panel")
         } else {
+            updateActionButton(session,
+                               "filters",
+                               icon = icon("map"))
             show("panel")
         }
     })

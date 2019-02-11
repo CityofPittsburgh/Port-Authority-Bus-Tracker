@@ -1,0 +1,12 @@
+name: BusTracker
+title: BusTracker
+username:
+account: pittsburghpa
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 707868
+bundleId: 1869665
+url: https://pittsburghpa.shinyapps.io/BusTracker/
+when: 1549911995.85467
+asMultiple: FALSE
+asStatic: FALSE
