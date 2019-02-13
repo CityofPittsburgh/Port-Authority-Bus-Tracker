@@ -67,6 +67,7 @@ ui <- fluidPage(style = "padding: 0;",
 
 # Define server logic
 server <- function(input, output, session) {
+    setBookmarkExclude(c("map_bounds", "map_center", "map_groups", "map_zoom", "map_marker_mouseout", "map_marker_mouseover", "map_marker_click"))
     # Refresh every 15 seconds
     autoRefresh <- reactiveTimer(15000)
     # Map
@@ -187,7 +188,16 @@ server <- function(input, output, session) {
             }
         }
     })
+    observe({
+        # Trigger this observer every time an input changes
+        reactiveValuesToList(input)
+        session$doBookmark()
+    })
+    # Update page URL
+    onBookmarked(function(url) {
+        updateQueryString(url)
+    })
 }
 
 # Run the application 
-shinyApp(ui = ui, server = server)
+shinyApp(ui = ui, server = server, enableBookmarking = "url")
