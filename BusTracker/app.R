@@ -20,6 +20,11 @@ getRealTime <- function(endpoint, params, response) {
         url <- paste0(baseUrl, endpoint, "?format=json&key=", key, "&", params_text)
     }
     json <- fromJSON(url)$`bustime-response`[[response]]
+    if (is.null(json)) {
+        return(data.frame())
+    } else {
+        return(json)
+    }
 }
 
 # Routes
@@ -135,6 +140,9 @@ server <- function(input, output, session) {
             # Get selected route buses locations
             for (i in seq(from = 1, to = nrow(routes), by = 10)) {
                 j <- i + 9
+                if (j > nrow(routes)) {
+                    j <- nrow(routes)
+                }
                 if (i == 1) {
                     vehicles <- getRealTime("getvehicles", list(rt = paste(routes$rt[i:j], collapse =",")), "vehicle")
                 } else {
@@ -142,26 +150,34 @@ server <- function(input, output, session) {
                 }
             }
             
-            # Merge buses to route colors
-            vehicles <- vehicles %>%
-                mutate(lat = as.numeric(lat),
-                       lon = as.numeric(lon)) %>%
-                left_join(routes, by = "rt")
-            
-            # Clear all deselected Routes
-            deRoute <- subset(load.routes, !(rt %in% routes$rt))
-            
-            for (route in deRoute$rt) {
-                leafletProxy("map") %>%
-                    clearGroup(route)
-            }
-            
-            # Add Selected Routes
-            for (route in routes$rt) {
-                temp <- subset(vehicles, rt == route)
-                leafletProxy("map") %>%
-                    clearGroup(route) %>%
-                    addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, label = ~paste(rt, "-", des), group = route, icon = awesomeIcons(markerColor =  "gray", text = ~rt, iconColor = ~rtclr))
+            if (nrow(vehicles) > 0) {
+                
+                # Merge buses to route colors
+                vehicles <- vehicles %>%
+                    mutate(lat = as.numeric(lat),
+                           lon = as.numeric(lon)) %>%
+                    left_join(routes, by = "rt")
+                
+                # Clear all deselected Routes
+                deRoute <- subset(load.routes, !(rt %in% routes$rt))
+                
+                for (route in deRoute$rt) {
+                    leafletProxy("map") %>%
+                        clearGroup(route)
+                }
+                
+                # Add Selected Routes
+                for (route in routes$rt) {
+                    temp <- subset(vehicles, rt == route)
+                    leafletProxy("map") %>%
+                        clearGroup(route) %>%
+                        addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, label = ~paste(rt, "-", des), group = route, icon = awesomeIcons(markerColor =  "gray", text = ~rt, iconColor = ~rtclr))
+                }
+            } else {
+                for (route in load.routes$rt) {
+                    leafletProxy("map") %>%
+                        clearGroup(route)
+                }
             }
         } else {
             # Clear all routes if none selected
