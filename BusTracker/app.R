@@ -150,15 +150,13 @@ server <- function(input, output, session) {
                     vehicles <- rbind(vehicles, getRealTime("getvehicles", list(rt = paste(routes$rt[i:j], collapse =",")), "vehicle"))
                 }
             }
-            
+            # Check API return
             if (nrow(vehicles) > 0) {
-                
                 # Merge buses to route colors
                 vehicles <- vehicles %>%
                     mutate(lat = as.numeric(lat),
                            lon = as.numeric(lon)) %>%
                     left_join(routes, by = "rt")
-                
                 # Clear all deselected Routes
                 deRoute <- subset(load.routes, !(rt %in% routes$rt))
                 
@@ -166,7 +164,6 @@ server <- function(input, output, session) {
                     leafletProxy("map") %>%
                         clearGroup(route)
                 }
-                
                 # Add Selected Routes
                 for (route in routes$rt) {
                     temp <- subset(vehicles, rt == route)
@@ -174,6 +171,7 @@ server <- function(input, output, session) {
                         clearGroup(route) %>%
                         addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, label = ~paste(rt, "-", des), group = route, icon = awesomeIcons(markerColor =  "gray", text = ~rt, iconColor = ~rtclr))
                 }
+            # Clear all routes if none returned
             } else {
                 for (route in load.routes$rt) {
                     leafletProxy("map") %>%
