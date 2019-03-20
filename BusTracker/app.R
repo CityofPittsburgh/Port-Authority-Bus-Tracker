@@ -27,6 +27,8 @@ getRealTime <- function(endpoint, params, response) {
     }
 }
 
+vehPal <- colorFactor(c("gray", "#f4a460", "#5F9EA0"), levels = c("Light Rail", "Inbound", "Outbound"))
+
 # Routes
 load.routes <- getRealTime("getroutes", response = "routes")
 
@@ -42,8 +44,7 @@ ui <- fluidPage(style = "padding: 0;",
                        wellPanel(id = "panel", style = "z-index: 1; overflow-y: scroll; height: calc(100vh); margin-bottom: 0;",
                            selectInput("basemapSelect",
                                              label = "Basemap",
-                                             choices = c(`OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", Google = "googleStreets", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter"),
-                                             selected = "OpenStreetMap.Mapnik"),
+                                             choices = c(Google = "googleStreets", `OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter")),
                                  actionButton("routeRefresh", "Deselect All", icon = icon("check-square-o")),
                                  tags$br(), tags$br(),
                                  checkboxGroupInput("routeSelect",
@@ -68,15 +69,22 @@ ui <- fluidPage(style = "padding: 0;",
 # Define server logic
 server <- function(input, output, session) {
     setBookmarkExclude(c("map_bounds", "map_center", "map_groups", "map_zoom", "map_marker_mouseout", "map_marker_mouseover", "map_marker_click"))
-    # Refresh every 15 seconds
-    autoRefresh <- reactiveTimer(15000)
+    # Refresh every 5 seconds
+    autoRefresh <- reactiveTimer(5000)
     # Map
     output$map <- renderLeaflet({
-        leaflet() %>%
+        map <- leaflet() %>%
             setView(-79.9959, 40.4406, zoom = 12) %>% 
             addEasyButton(easyButton(
                 icon="fa-crosshairs", title="Locate Me",
-                onClick=JS("function(btn, map){ map.locate({setView: true}); }")))
+                onClick=JS("function(btn, map){ map.locate({setView: true}); }"))) %>%
+            addLegend(position = "bottomright", pal = vehPal, values = c("Light Rail", "Inbound", "Outbound"))
+        if (isolate(input$basemapSelect) == "googleStreets") {
+             map <- addTiles(map, urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", attribution = "Google")
+        } else {
+            map <- addProviderTiles(map, isoalte(input$basemapSelect), options = providerTileOptions(noWrap = TRUE))
+        }
+        map
     })
     # Filter Show - Mobile usage
     observe({
@@ -155,8 +163,16 @@ server <- function(input, output, session) {
                 # Merge buses to route colors
                 vehicles <- vehicles %>%
                     mutate(lat = as.numeric(lat),
-                           lon = as.numeric(lon)) %>%
-                    left_join(routes, by = "rt")
+                           lon = as.numeric(lon),
+                           timestamp = as.POSIXct(tmstmp, format = "%Y%m%d %H:%M"),
+                           marker = case_when(rtpidatafeed == "Light Rail" ~ "lightgray",
+                                              grepl("downtown", des, ignore.case = T) ~ "beige",
+                                              TRUE ~ "cadetblue"
+                                                  ),
+                           txt = case_when(rtpidatafeed == "Light Rail" | grepl("downtown", des, ignore.case = T) ~ "black",
+                                           TRUE ~ "white"
+                           )) %>%
+                    left_join(routes, by = c("rt", "rtpidatafeed"))
                 # Clear all deselected Routes
                 deRoute <- subset(load.routes, !(rt %in% routes$rt))
                 
@@ -169,7 +185,11 @@ server <- function(input, output, session) {
                     temp <- subset(vehicles, rt == route)
                     leafletProxy("map") %>%
                         clearGroup(route) %>%
-                        addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, label = ~paste(rt, "-", des), group = route, icon = awesomeIcons(markerColor =  "gray", text = ~rt, iconColor = ~rtclr))
+                        addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, 
+                                          label = ~paste(rt, "-", des), 
+                                          popup = ~paste(rt, "-", des), 
+                                          group = route,
+                                          icon = awesomeIcons(markerColor =  ~marker, text = ~rt, iconColor = ~txt))
                 }
             # Clear all routes if none returned
             } else {
