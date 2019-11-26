@@ -7,6 +7,9 @@ library(leaflet)
 require(jsonlite)
 require(dplyr)
 require(shinyjs)
+require(readr)
+
+holiday <- read_csv("HolidayBusList.csv")$Vehicle_ID
 
 key <- fromJSON("key.json")$key
 
@@ -27,7 +30,7 @@ getRealTime <- function(endpoint, params, response) {
     }
 }
 
-vehPal <- colorFactor(c("gray", "#f4a460", "#5F9EA0"), levels = c("Light Rail", "Inbound", "Outbound"))
+vehPal <- colorFactor(c("gray", "#f4a460", "#5F9EA0", "#71af26"), levels = c("Light Rail", "Inbound", "Outbound", "Holiday"))
 
 # Routes
 load.routes <- getRealTime("getroutes", response = "routes")
@@ -78,7 +81,7 @@ server <- function(input, output, session) {
             addEasyButton(easyButton(
                 icon="fa-crosshairs", title="Locate Me",
                 onClick=JS("function(btn, map){ map.locate({setView: true}); }"))) %>%
-            addLegend(position = "bottomright", pal = vehPal, values = c("Light Rail", "Inbound", "Outbound"))
+            addLegend(position = "bottomright", pal = vehPal, values = c("Light Rail", "Inbound", "Outbound", "Holiday"))
         if (isolate(input$basemapSelect) == "googleStreets") {
              map <- addTiles(map, urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", attribution = "Google")
         } else {
@@ -169,6 +172,11 @@ server <- function(input, output, session) {
                                               grepl("downtown", des, ignore.case = T) ~ "beige",
                                               TRUE ~ "cadetblue"
                                                   ),
+                           marker_type = case_when(rtpidatafeed == "Light Rail" ~ "Light Rail",
+                                                   grepl("downtown", des, ignore.case = T) ~ "Downtown",
+                                                   TRUE ~ "Outbound"
+                                                   ),
+                           holiday = ifelse(vid %in% holiday, "Y", "N"),
                            txt = case_when(rtpidatafeed == "Light Rail" | grepl("downtown", des, ignore.case = T) ~ "black",
                                            TRUE ~ "white"
                            )) %>%
@@ -182,7 +190,8 @@ server <- function(input, output, session) {
                 }
                 # Add Selected Routes
                 for (route in routes$rt) {
-                    temp <- subset(vehicles, rt == route)
+                    holiday <- subset(vehicles, holiday == "Y")
+                    temp <- subset(vehicles, rt == route && holiday == "N")
                     leafletProxy("map") %>%
                         clearGroup(route) %>%
                         addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, 
@@ -190,6 +199,14 @@ server <- function(input, output, session) {
                                           popup = ~paste(rt, "-", des), 
                                           group = route,
                                           icon = awesomeIcons(markerColor =  ~marker, text = ~rt, iconColor = ~txt))
+                    if (nrow(holiday) > 0) {
+                        leafletProxy("map") %>%
+                            addAwesomeMarkers(data = holiday, lat = ~lat, lng = ~lon, 
+                                              label = ~paste(rt, "-", des), 
+                                              popup = ~paste(rt, "-", des), 
+                                              group = route,
+                                              icon = awesomeIcons(markerColor = "green", icon = "snowflake-o", library = "fa", iconColor = "red"))
+                    }
                 }
             # Clear all routes if none returned
             } else {
