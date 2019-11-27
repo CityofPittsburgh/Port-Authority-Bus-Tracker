@@ -43,12 +43,25 @@ load.routes <- getRealTime("getroutes", response = "routes")
 ui <- fluidPage(style = "padding: 0;", 
                 tags$head(tags$title("Port Authority Bus Tracker", NULL)),
                 tags$head(tags$link(rel = "shortcut icon", href="favicon-bus.ico")),
+                tags$head(
+                    tags$style(
+                        HTML(".checkbox-inline { 
+                                margin-left: 0px;
+                                margin-right: 10px;
+                             }
+                             .checkbox-inline+.checkbox-inline {
+                                margin-left: 0px;
+                                margin-right: 10px;
+                             }"
+                        )
+                    ) 
+                ),
                 useShinyjs(),
                 absolutePanel(top = 10, right = 20, id = "expand", style = "display: none; z-index: 1000; padding: 0;",
                               actionButton("filters", "", icon = icon("map"))),
                 # Column for the Filters
                 column(2, style = "padding: 0;",
-                       wellPanel(id = "panel", style = "z-index: 1; overflow-y: scroll; height: calc(100vh); margin-bottom: 0;",
+                       wellPanel(id = "panel", style = "z-index: 1; overflow-y: auto; height: calc(100vh); margin-bottom: 0;",
                            selectInput("basemapSelect",
                                              label = "Basemap",
                                              choices = c(Google = "googleStreets", `OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter")),
@@ -59,6 +72,7 @@ ui <- fluidPage(style = "padding: 0;",
                                         choices = c("On", "Off", "Only")),
                            checkboxGroupInput("routeSelect",
                                               "Show Routes:",
+                                              inline = TRUE,
                                               choices = sort(load.routes$rt),
                                               selected = sort(load.routes$rt))
                        )
