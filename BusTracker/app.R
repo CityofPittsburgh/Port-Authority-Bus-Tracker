@@ -45,23 +45,28 @@ ui <- fluidPage(style = "padding: 0;",
                 tags$head(tags$link(rel = "shortcut icon", href="favicon-bus.ico")),
                 tags$head(
                     tags$style(
-                        HTML(".checkbox-inline { 
+                        HTML(".checkbox-inline {
                                 margin-left: 0px;
                                 margin-right: 10px;
                              }
                              .checkbox-inline+.checkbox-inline {
                                 margin-left: 0px;
                                 margin-right: 10px;
+                             }
+                             #map {height: calc(100vh) !important;}
+                             @media screen and (max-width: 600px) {
+                                 #panel {display: none;}
+                                 #expand {display: initial !important;}
                              }"
                         )
-                    ) 
+                    )
                 ),
                 useShinyjs(),
                 absolutePanel(top = 10, right = 20, id = "expand", style = "display: none; z-index: 1000; padding: 0;",
                               actionButton("filters", "", icon = icon("map"))),
                 # Column for the Filters
                 column(2, style = "padding: 0;",
-                       wellPanel(id = "panel", style = "z-index: 1; overflow-y: auto; height: calc(100vh); margin-bottom: 0;",
+                       wellPanel(id = "panel", style = "z-index: 1; overflow-y: scroll; height: calc(100vh); margin-bottom: 0;",
                            selectInput("basemapSelect",
                                              label = "Basemap",
                                              choices = c(Google = "googleStreets", `OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter")),
@@ -84,13 +89,6 @@ ui <- fluidPage(style = "padding: 0;",
                 column(10, style = "padding: 0;",
                       leafletOutput("map")
                       ),
-                # CSS for Map and Mobile use
-               tags$style(type = "text/css",
-                          "#map {height: calc(100vh) !important;}
-                          @media screen and (max-width: 600px) {
-                            #panel {display: none;}
-                            #expand {display: initial !important;}
-                          }")
 )
 
 # Define server logic
