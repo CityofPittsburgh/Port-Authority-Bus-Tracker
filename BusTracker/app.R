@@ -34,7 +34,7 @@ getRealTime <- function(endpoint, params, response) {
     }
 }
 
-vehPal <- colorFactor(c("#d04020", "#1162a4", "#f4a460", "#5F9EA0", "#71af26"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
+vehPal <- colorFactor(c("#d04020", "#1162a4", "#f4a460", "#5F9EA0", "#76b000"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
 
 # Routes
 load.routes <- getRealTime("getroutes", response = "routes")
@@ -207,9 +207,11 @@ server <- function(input, output, session) {
                            marker = case_when(rtpidatafeed == "Light Rail" & grepl("RED", rt) ~ "red",
                                               rtpidatafeed == "Light Rail" & !grepl("RED", rt) ~ "darkblue",
                                               grepl("downtown", des, ignore.case = T) ~ "beige",
+                                              grepl("T Station", des) ~ "beige",
                                               TRUE ~ "cadetblue"),
                            direction = case_when(rtpidatafeed == "Light Rail" & grepl("Allegheny", des) ~ "Inbound",
                                                  grepl("downtown", des, ignore.case = T) ~ "Inbound",
+                                                 grepl("T Station", des) ~ "Inbound",
                                                  rtpidatafeed == "Light Rail" & !grepl("Allegheny", des) ~ "Outbound",
                                                  TRUE ~ "Outbound"),
                            holiday = ifelse(vid %in% holiday, "Y", "N"),
@@ -263,7 +265,7 @@ server <- function(input, output, session) {
                                               label = ~paste(rt, "-", des), 
                                               popup = ~paste(rt, "-", des), 
                                               group = route,
-                                              icon = awesomeIcons(markerColor = "green", icon = "snowflake-o", library = "fa", iconColor = "red"))
+                                              icon = awesomeIcons(markerColor = "green", icon = "snowflake-o", library = "fa", iconColor = "#ffffff"))
                     }
                 }
             # Clear all routes if none returned
