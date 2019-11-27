@@ -34,7 +34,7 @@ getRealTime <- function(endpoint, params, response) {
     }
 }
 
-vehPal <- colorFactor(c("gray", "#f4a460", "#5F9EA0", "#71af26"), levels = c("Light Rail", "Inbound", "Outbound", "Holiday"))
+vehPal <- colorFactor(c("#d04020", "#1162a4", "#f4a460", "#5F9EA0", "#71af26"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
 
 # Routes
 load.routes <- getRealTime("getroutes", response = "routes")
@@ -68,6 +68,9 @@ ui <- fluidPage(style = "padding: 0;",
                            radioButtons("holidayTracker",
                                         "Show Holiday Cars:",
                                         choices = c("On", "Off", "Only")),
+                           radioButtons("inOut",
+                                        "Transit Direction:",
+                                        choices = c("Both", "Inbound", "Outbound")),
                            actionButton("routeRefresh", "Deselect All", icon = icon("check-square-o")),
                            tags$br(), tags$br(),
                            checkboxGroupInput("routeSelect",
@@ -102,7 +105,7 @@ server <- function(input, output, session) {
             addEasyButton(easyButton(
                 icon="fa-crosshairs", title="Locate Me",
                 onClick=JS("function(btn, map){ map.locate({setView: true}); }"))) %>%
-            addLegend(position = "bottomright", pal = vehPal, values = c("Light Rail", "Inbound", "Outbound", "Holiday"))
+            addLegend(position = "bottomright", pal = vehPal, values = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
         if (isolate(input$basemapSelect) == "googleStreets") {
              map <- addTiles(map, urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", attribution = "Google")
         } else {
@@ -201,16 +204,18 @@ server <- function(input, output, session) {
                     mutate(lat = as.numeric(lat),
                            lon = as.numeric(lon),
                            timestamp = as.POSIXct(tmstmp, format = "%Y%m%d %H:%M"),
-                           marker = case_when(rtpidatafeed == "Light Rail" ~ "lightgray",
+                           marker = case_when(rtpidatafeed == "Light Rail" & grepl("RED", rt) ~ "red",
+                                              rtpidatafeed == "Light Rail" & !grepl("RED", rt) ~ "darkblue",
                                               grepl("downtown", des, ignore.case = T) ~ "beige",
-                                              TRUE ~ "cadetblue"
-                                                  ),
-                           marker_type = case_when(rtpidatafeed == "Light Rail" ~ "Light Rail",
-                                                   grepl("downtown", des, ignore.case = T) ~ "Downtown",
-                                                   TRUE ~ "Outbound"
-                                                   ),
+                                              TRUE ~ "cadetblue"),
+                           direction = case_when(rtpidatafeed == "Light Rail" & grepl("Allegheny", des) ~ "Inbound",
+                                                 rtpidatafeed == "Light Rail" & !grepl("Allegheny", des) ~ "Outbound",
+                                                 grepl("downtown", des, ignore.case = T) ~ "Downtown",
+                                                 TRUE ~ "Outbound"),
                            holiday = ifelse(vid %in% holiday, "Y", "N"),
-                           txt = case_when(rtpidatafeed == "Light Rail" | grepl("downtown", des, ignore.case = T) ~ "black",
+                           txt = case_when(grepl("downtown", des, ignore.case = T) ~ "black",
+                                           rtpidatafeed == "Light Rail" & grepl("RED", rt) ~ "black",
+                                           rtpidatafeed == "Light Rail" & !grepl("RED", rt) ~ "white",
                                            TRUE ~ "white"
                            )) %>%
                     left_join(routes, by = c("rt", "rtpidatafeed"))
@@ -220,6 +225,10 @@ server <- function(input, output, session) {
                 for (route in deRoute$rt) {
                     leafletProxy("map") %>%
                         clearGroup(route)
+                }
+                # Direction Tracker
+                if (input$inOut != "Both") {
+                    vehicles <- subset(vehicles, direction == input$inOut)
                 }
                 # Add Selected Routes
                 for (route in routes$rt) {
