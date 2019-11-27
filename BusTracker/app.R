@@ -20,7 +20,7 @@ getRealTime <- function(endpoint, params, response) {
         url <- paste0(baseUrl, endpoint, "?format=json&key=", key)
     } else if (typeof(params) == "list") {
         params_text <- paste0(names(params), "=", params, collapse = "&")
-        url <- paste0(baseUrl, endpoint, "?format=json&key=", key, "&", params_text)
+        url <- URLencode(paste0(baseUrl, endpoint, "?format=json&key=", key, "&", params_text))
     }
     json <- fromJSON(url)$`bustime-response`[[response]]
     if (is.null(json)) {
@@ -48,12 +48,15 @@ ui <- fluidPage(style = "padding: 0;",
                            selectInput("basemapSelect",
                                              label = "Basemap",
                                              choices = c(Google = "googleStreets", `OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter")),
-                                 actionButton("routeRefresh", "Deselect All", icon = icon("check-square-o")),
-                                 tags$br(), tags$br(),
-                                 checkboxGroupInput("routeSelect",
-                                                    "Show Routes:",
-                                                    choices = sort(load.routes$rt),
-                                                    selected = sort(load.routes$rt))
+                           actionButton("routeRefresh", "Deselect All", icon = icon("check-square-o")),
+                           tags$br(), tags$br(),
+                           radioButtons("holidayTracker",
+                                        "Show Holiday Cars:",
+                                        choices = c("On", "Off", "Only")),
+                           checkboxGroupInput("routeSelect",
+                                              "Show Routes:",
+                                              choices = sort(load.routes$rt),
+                                              selected = sort(load.routes$rt))
                        )
                    ),
                 # Column for the Map
@@ -190,15 +193,31 @@ server <- function(input, output, session) {
                 }
                 # Add Selected Routes
                 for (route in routes$rt) {
-                    holiday <- subset(vehicles, holiday == "Y")
-                    temp <- subset(vehicles, rt == route && holiday == "N")
-                    leafletProxy("map") %>%
-                        clearGroup(route) %>%
-                        addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, 
-                                          label = ~paste(rt, "-", des), 
-                                          popup = ~paste(rt, "-", des), 
-                                          group = route,
-                                          icon = awesomeIcons(markerColor =  ~marker, text = ~rt, iconColor = ~txt))
+                    # Check for Holiday Tracker
+                    if (input$holidayTracker == "On") {
+                        temp <- subset(vehicles, rt == route & holiday == "N")
+                        holiday <- subset(vehicles, rt == route & holiday == "Y")
+                    } else if (input$holidayTracker == "Only") {
+                        temp <- data.frame()
+                        holiday <- subset(vehicles, rt == route & holiday == "Y")
+                    } else {
+                        temp <- subset(vehicles, rt == route)
+                        holiday <- data.frame()
+                    }
+                    # Map Normal Buses
+                    if (nrow(temp) > 0) {
+                        leafletProxy("map") %>%
+                            clearGroup(route) %>%
+                            addAwesomeMarkers(data = temp, lat = ~lat, lng = ~lon, 
+                                              label = ~paste(rt, "-", des), 
+                                              popup = ~paste(rt, "-", des), 
+                                              group = route,
+                                              icon = awesomeIcons(markerColor =  ~marker, text = ~rt, iconColor = ~txt))
+                    } else {
+                        leafletProxy("map") %>%
+                            clearGroup(route)
+                    }
+                    # Map Holiday Buses
                     if (nrow(holiday) > 0) {
                         leafletProxy("map") %>%
                             addAwesomeMarkers(data = holiday, lat = ~lat, lng = ~lon, 
