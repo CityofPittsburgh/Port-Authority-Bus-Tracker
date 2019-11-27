@@ -8,6 +8,10 @@ require(jsonlite)
 require(dplyr)
 require(shinyjs)
 require(readr)
+require(rgdal)
+
+load.lines <- readOGR("paac_routes_1909/PAAC_Routes_1909.shp") %>%
+    spTransform(CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
 holiday <- read_csv("HolidayBusList.csv")$Vehicle_ID
 
@@ -105,6 +109,18 @@ server <- function(input, output, session) {
                                "filters",
                                icon = icon("map"))
             show("panel")
+        }
+    })
+    # Route Lines Map
+    observe({
+        if (!is.null(input$routeSelect) & length(input$routeSelect) == 1) {
+            line <- subset(load.lines, ROUTE == input$routeSelect)
+            leafletProxy("map") %>%
+                clearGroup("lines") %>%
+                addPolylines(data = line, group = "lines", color = "blue", weight = 2)
+        } else {
+            leafletProxy("map") %>%
+                clearGroup("lines")
         }
     })
     # Route Selection filter
