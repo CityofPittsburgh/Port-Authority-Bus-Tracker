@@ -34,7 +34,7 @@ getRealTime <- function(endpoint, params, response) {
     }
 }
 
-vehPal <- colorFactor(c("#d04020", "#1162a4", "#f4a460", "#5F9EA0", "#76b000"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
+vehPal <- colorFactor(c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#76b000"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
 
 # Routes
 load.routes <- getRealTime("getroutes", response = "routes")
@@ -70,9 +70,12 @@ ui <- fluidPage(style = "padding: 0;",
                            selectInput("basemapSelect",
                                              label = "Basemap",
                                              choices = c(Google = "googleStreets", `OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter")),
-                           radioButtons("holidayTracker",
-                                        "Show Holiday Cars:",
-                                        choices = c("On", "Off", "Only")),
+                           hidden(
+                               radioButtons("holidayTracker",
+                                            "Show Holiday Cars:",
+                                            selected = "Off",
+                                            choices = c("On", "Off", "Only"))
+                           ),
                            radioButtons("inOut",
                                         "Transit Direction:",
                                         choices = c("Both", "Inbound", "Outbound")),
@@ -103,7 +106,7 @@ server <- function(input, output, session) {
             addEasyButton(easyButton(
                 icon="fa-crosshairs", title="Locate Me",
                 onClick=JS("function(btn, map){ map.locate({setView: true}); }"))) %>%
-            addLegend(position = "bottomright", pal = vehPal, values = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
+            addLegend(position = "bottomright", pal = vehPal, values = c("Red Line", "Blue Line", "Silver Line", "Inbound", "Outbound", "Holiday"))
         if (isolate(input$basemapSelect) == "googleStreets") {
              map <- addTiles(map, urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", attribution = "Google")
         } else {
@@ -203,10 +206,11 @@ server <- function(input, output, session) {
                            lon = as.numeric(lon),
                            timestamp = as.POSIXct(tmstmp, format = "%Y%m%d %H:%M"),
                            marker = case_when(rtpidatafeed == "Light Rail" & grepl("RED", rt) ~ "red",
-                                              rtpidatafeed == "Light Rail" & !grepl("RED", rt) ~ "darkblue",
+                                              rtpidatafeed == "Light Rail" & grepl("BLUE", rt) ~ "darkblue",
+                                              rtpidatafeed == "Light Rail" & grepl("SLVR", rt) ~ "cadetblue",
                                               grepl("downtown", des, ignore.case = T) ~ "beige",
                                               grepl("T Station", des) ~ "beige",
-                                              TRUE ~ "cadetblue"),
+                                              TRUE ~ "darkpurple"),
                            direction = case_when(rtpidatafeed == "Light Rail" & grepl("Allegheny", des) ~ "Inbound",
                                                  grepl("downtown", des, ignore.case = T) ~ "Inbound",
                                                  grepl("T Station", des) ~ "Inbound",
