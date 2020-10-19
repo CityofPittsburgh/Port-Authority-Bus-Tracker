@@ -1,6 +1,5 @@
 # App Name: PAAC Tracker
 # Author: Geoffrey Arnold
-
 library(shiny)
 require(curl)
 library(leaflet)
@@ -9,11 +8,24 @@ require(dplyr)
 require(shinyjs)
 require(readr)
 require(rgdal)
+require(chron)
+require(timeDate)
 
-load.lines <- readOGR("paac_routes_1909/PAAC_Routes_1909.shp") %>%
-    spTransform(CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+load.lines <- readOGR("https://opendata.arcgis.com/datasets/a26afd68bbc945898c8b51c1d1d5315e_0.geojson")
 
-holiday <- read_csv("HolidayBusList.csv")$Vehicle_ID
+special <- read_csv("SpecialBuses.csv") %>%
+    mutate(Vehicle_ID = as.character(Vehicle_ID))
+
+# Holiday Buses
+this_year <- as.numeric(format(Sys.Date(), '%Y'))
+xmas_time <- as.Date(holiday(this_year, "USThanksgivingDay")) - 5
+if (Sys.Date() >= xmas_time) {
+    vehPal <- colorFactor(c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#76b000", "#f09d11"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday", "Electric"))
+    icon_choices <- c("Electric", "Holiday")
+} else {
+    vehPal <- colorFactor(c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#f09d11"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Electric"))
+    icon_choices <- c("Electric")
+}
 
 key <- fromJSON("key.json")$key
 
@@ -33,8 +45,6 @@ getRealTime <- function(endpoint, params, response) {
         return(json)
     }
 }
-
-vehPal <- colorFactor(c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#76b000"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday"))
 
 # Routes
 load.routes <- getRealTime("getroutes", response = "routes")
@@ -70,11 +80,10 @@ ui <- fluidPage(style = "padding: 0;",
                            selectInput("basemapSelect",
                                              label = "Basemap",
                                              choices = c(Google = "googleStreets", `OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter")),
-                           hidden(
-                               radioButtons("holidayTracker",
-                                            "Show Holiday Cars:",
-                                            selected = "Off",
-                                            choices = c("On", "Off", "Only"))
+                           checkboxGroupInput("specialTracker",
+                                        "Show Special Icons:",
+                                        selected = NA,
+                                        choices = icon_choices
                            ),
                            radioButtons("inOut",
                                         "Transit Direction:",
@@ -216,13 +225,14 @@ server <- function(input, output, session) {
                                                  grepl("T Station", des) ~ "Inbound",
                                                  rtpidatafeed == "Light Rail" & !grepl("Allegheny", des) ~ "Outbound",
                                                  TRUE ~ "Outbound"),
-                           holiday = ifelse(vid %in% holiday, "Y", "N"),
                            txt = case_when(grepl("downtown", des, ignore.case = T) ~ "black",
                                            rtpidatafeed == "Light Rail" & grepl("RED", rt) ~ "black",
                                            rtpidatafeed == "Light Rail" & !grepl("RED", rt) ~ "white",
                                            TRUE ~ "white"
                            )) %>%
-                    left_join(routes, by = c("rt", "rtpidatafeed"))
+                    left_join(routes, by = c("rt", "rtpidatafeed")) %>%
+                    left_join(special, by = c("vid" = "Vehicle_ID"))
+                
                 # Clear all deselected Routes
                 deRoute <- subset(load.routes, !(rt %in% routes$rt))
                 
@@ -237,15 +247,12 @@ server <- function(input, output, session) {
                 # Add Selected Routes
                 for (route in routes$rt) {
                     # Check for Holiday Tracker
-                    if (input$holidayTracker == "On") {
-                        temp <- subset(vehicles, rt == route & holiday == "N")
-                        holiday <- subset(vehicles, rt == route & holiday == "Y")
-                    } else if (input$holidayTracker == "Only") {
-                        temp <- data.frame()
-                        holiday <- subset(vehicles, rt == route & holiday == "Y")
+                    if (length(input$specialTracker) > 0) {
+                        temp <- subset(vehicles, rt == route & !(Icon %in% input$specialTracker))
+                        special <- subset(vehicles, rt == route & Icon %in% input$specialTracker)
                     } else {
                         temp <- subset(vehicles, rt == route)
-                        holiday <- data.frame()
+                        special <- data.frame()
                     }
                     # Map Normal Buses
                     if (nrow(temp) > 0) {
@@ -261,13 +268,13 @@ server <- function(input, output, session) {
                             clearGroup(route)
                     }
                     # Map Holiday Buses
-                    if (nrow(holiday) > 0) {
+                    if (nrow(special) > 0) {
                         leafletProxy("map") %>%
-                            addAwesomeMarkers(data = holiday, lat = ~lat, lng = ~lon, 
+                            addAwesomeMarkers(data = icons, lat = ~lat, lng = ~lon, 
                                               label = ~paste(rt, "-", des), 
                                               popup = ~paste(rt, "-", des), 
                                               group = route,
-                                              icon = awesomeIcons(markerColor = "green", icon = "snowflake-o", library = "fa", iconColor = "#ffffff"))
+                                              icon = awesomeIcons(markerColor = ~Color, icon = ~Icon, library = "fa", iconColor = "#ffffff"))
                     }
                 }
             # Clear all routes if none returned
