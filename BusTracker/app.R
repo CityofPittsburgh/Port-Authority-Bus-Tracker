@@ -140,11 +140,12 @@ server <- function(input, output, session) {
     })
     # Route Lines Map
     observe({
-        if (!is.null(input$routeSelect) & length(input$routeSelect) == 1) {
-            line <- subset(load.lines, ROUTE == input$routeSelect)
+        if (!is.null(input$routeSelect) & length(input$routeSelect) < 10) {
+            line <- subset(load.lines, Route %in% input$routeSelect)
+            pal <- colorFactor(palette = "Set1", domain = line$Route)
             leafletProxy("map") %>%
                 clearGroup("lines") %>%
-                addPolylines(data = line, group = "lines", color = "blue", weight = 2)
+                addPolylines(data = line, group = "lines", color = ~pal(Route), weight = 2, label = ~Route)
         } else {
             leafletProxy("map") %>%
                 clearGroup("lines")
