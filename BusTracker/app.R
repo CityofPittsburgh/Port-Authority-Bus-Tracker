@@ -13,19 +13,22 @@ require(timeDate)
 
 load.lines <- readOGR("https://opendata.arcgis.com/datasets/a26afd68bbc945898c8b51c1d1d5315e_0.geojson")
 
-special <- read_csv("SpecialBuses.csv") %>%
+load.special <- read_csv("SpecialBuses.csv") %>%
     mutate(Vehicle_ID = as.character(Vehicle_ID))
 
 # Holiday Buses
 this_year <- as.numeric(format(Sys.Date(), '%Y'))
 xmas_time <- as.Date(holiday(this_year, "USThanksgivingDay")) - 5
 if (Sys.Date() >= xmas_time) {
-    vehPal <- colorFactor(c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#76b000", "#f09d11"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday", "Electric"))
-    icon_choices <- c("Electric", "Holiday")
+    vehColors <- c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#76b000", "#f09d11")
+    vehLevels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Holiday", "Electric")
+    icon_choices <- c("None", "Only Electric", "Show Electric", "Only Holiday", "Show Holiday", "Only Holiday/Electric")
 } else {
-    vehPal <- colorFactor(c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#f09d11"), levels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Electric"))
-    icon_choices <- c("Electric")
+    vehColors <- c("#d04020", "#1162a4", "#5F9EA0", "#f4a460", "#57366b", "#f09d11")
+    vehLevels = c("Red Line", "Blue Line", "Inbound", "Outbound", "Electric")
+    icon_choices <- c("None", "Only Electric", "Show Electric")
 }
+vehPal <- colorFactor(vehColors, levels = vehLevels)
 
 key <- fromJSON("key.json")$key
 
@@ -80,9 +83,9 @@ ui <- fluidPage(style = "padding: 0;",
                            selectInput("basemapSelect",
                                              label = "Basemap",
                                              choices = c(Google = "googleStreets", `OSM Mapnik` = "OpenStreetMap.Mapnik", `OSM France` = "OpenStreetMap.France", `OSM Humanitarian` = "OpenStreetMap.HOT", `Esri Satellite` = "Esri.WorldImagery", `Stamen Toner` = "Stamen.Toner", Esri = "Esri.WorldStreetMap", `CartoDB Dark Matter` = "CartoDB.DarkMatter")),
-                           checkboxGroupInput("specialTracker",
-                                        "Show Special Icons:",
-                                        selected = NA,
+                           radioButtons("specialTracker",
+                                        "Show Special Vehicles:",
+                                        selected = "None",
                                         choices = icon_choices
                            ),
                            radioButtons("inOut",
@@ -115,7 +118,7 @@ server <- function(input, output, session) {
             addEasyButton(easyButton(
                 icon="fa-crosshairs", title="Locate Me",
                 onClick=JS("function(btn, map){ map.locate({setView: true}); }"))) %>%
-            addLegend(position = "bottomright", pal = vehPal, values = c("Red Line", "Blue Line", "Silver Line", "Inbound", "Outbound", "Holiday"))
+            addLegend(position = "bottomright", pal = vehPal, values = vehLevels)
         if (isolate(input$basemapSelect) == "googleStreets") {
              map <- addTiles(map, urlTemplate = "http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}&s=Ga", attribution = "Google")
         } else {
@@ -232,7 +235,7 @@ server <- function(input, output, session) {
                                            TRUE ~ "white"
                            )) %>%
                     left_join(routes, by = c("rt", "rtpidatafeed")) %>%
-                    left_join(special, by = c("vid" = "Vehicle_ID"))
+                    left_join(load.special, by = c("vid" = "Vehicle_ID"))
                 
                 # Clear all deselected Routes
                 deRoute <- subset(load.routes, !(rt %in% routes$rt))
@@ -248,9 +251,21 @@ server <- function(input, output, session) {
                 # Add Selected Routes
                 for (route in routes$rt) {
                     # Check for Holiday Tracker
-                    if (length(input$specialTracker) > 0) {
-                        temp <- subset(vehicles, rt == route & !(Icon %in% input$specialTracker))
-                        special <- subset(vehicles, rt == route & Icon %in% input$specialTracker)
+                    if (input$specialTracker == "Only Electric") {
+                        temp <- data.frame()
+                        special <- subset(vehicles, rt == route & electric == 1)
+                    } else if (input$specialTracker == "Show Electric") {
+                        temp <- subset(vehicles, rt == route & (electric == 0 | is.na(Icon)))
+                        special <- subset(vehicles, rt == route & electric == 1)
+                    } else if (input$specialTracker == "Only Holiday") {
+                        temp <- data.frame()
+                        special <- subset(vehicles, rt == route & holiday == 1)
+                    } else if (input$specialTracker == "Show Holiday") {
+                        temp <- subset(vehicles, rt == route & (holiday != 1 | is.na(Icon)))
+                        special <- subset(vehicles, rt == route & holiday == 1)
+                    } else if (input$specialTracker == "Only Holiday/Electric") {
+                        temp <- data.frame()
+                        special <- subset(vehicles, rt == route & (electric == 1 | holiday == 1))
                     } else {
                         temp <- subset(vehicles, rt == route)
                         special <- data.frame()
@@ -268,10 +283,11 @@ server <- function(input, output, session) {
                         leafletProxy("map") %>%
                             clearGroup(route)
                     }
-                    # Map Holiday Buses
+                    # Map Special Buses
                     if (nrow(special) > 0) {
                         leafletProxy("map") %>%
-                            addAwesomeMarkers(data = icons, lat = ~lat, lng = ~lon, 
+                            # leaflet() %>%
+                            addAwesomeMarkers(data = special, lat = ~lat, lng = ~lon, 
                                               label = ~paste(rt, "-", des), 
                                               popup = ~paste(rt, "-", des), 
                                               group = route,
