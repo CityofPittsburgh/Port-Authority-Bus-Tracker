@@ -68,7 +68,6 @@ ui <- fluidPage(style = "padding: 0;",
                              }
                              #map {height: calc(100vh) !important;}
                              @media screen and (max-width: 600px) {
-                                 #panel {display: none;}
                                  #expand {display: initial !important;}
                              }"
                         )
@@ -127,18 +126,18 @@ server <- function(input, output, session) {
         map
     })
     # Filter Show - Mobile usage
-    observe({
+    observeEvent(input$filters, {
         # Has Filter button been selected?
         if ((input$filters %% 2) != 0) {
+            shinyjs::hide("panel")
             updateActionButton(session,
                                "filters",
                                icon = icon("search"))
-            hide("panel")
         } else {
+            shinyjs::show("panel")
             updateActionButton(session,
                                "filters",
                                icon = icon("map"))
-            show("panel")
         }
     })
     # Route Lines Map
